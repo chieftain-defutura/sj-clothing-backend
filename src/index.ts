@@ -12,17 +12,13 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/", async (req, res) => {
-  res.send("WELCOME TO DEHUSTLE API");
+app.get("/", (req, res) => {
+  res.send("<h2>Hello world </h2>");
 });
 
 const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 
 const stripe = new Stripe(SECRET_KEY);
-
-app.listen(PORT, () => {
-  console.log(`server running on PORT ${PORT}`);
-});
 
 app.post("/create-payment-intent", async (req, res) => {
   try {
@@ -37,7 +33,11 @@ app.post("/create-payment-intent", async (req, res) => {
     res.json({ paymentIntent: paymentIntent.client_secret });
   } catch (e: any) {
     console.log("error occuredd");
-    console.log(e.message);
+    console.log(e);
     res.json({ error: e.message });
   }
+});
+
+app.listen(PORT, () => {
+  console.log(`server running on PORT ${PORT}`);
 });

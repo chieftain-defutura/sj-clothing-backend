@@ -22,20 +22,69 @@ const stripe = new Stripe(SECRET_KEY);
 
 app.post("/create-payment-intent", async (req, res) => {
   try {
+    const { email, name, currency, amount } = req.body;
+    // if (!name) return res.status(400).json({ message: "Please enter a name" });
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: req.body.amount,
-      currency: "usd",
-      automatic_payment_methods: {
-        enabled: true,
+      amount: Math.round(amount * 100),
+      currency: currency,
+      payment_method_types: ["card"],
+      metadata: {
+        email,
+        name,
+        currency,
+        amount,
       },
     });
-
-    res.json({ paymentIntent: paymentIntent.client_secret });
-  } catch (e: any) {
-    console.log("error occuredd");
-    console.log(e);
-    res.json({ error: e.message });
+    const clientSecret = paymentIntent.client_secret;
+    res.json({
+      message: "Payment initiated",
+      amount: amount,
+      currency: currency,
+      clientSecret,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
   }
+});
+
+app.post("/stripe-payment", async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+
+  if (typeof sig !== "string") {
+    res.status(400).json({ message: "Bad Request" });
+    return;
+  }
+
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
+    console.error("Stripe webhook secret is not defined or empty.");
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+
+  let event;
+
+  try {
+    event = await stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      stripeWebhookSecret
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: "Bad Request" });
+    return;
+  }
+
+  if (event.type === "payment_intent.created") {
+    console.log(`${event.data.object.metadata.name} initated payment!`);
+  }
+  if (event.type === "payment_intent.succeeded") {
+    console.log(`${event.data.object.metadata.name} succeeded payment!`);
+  }
+  res.json({ ok: true });
 });
 
 app.listen(PORT, () => {

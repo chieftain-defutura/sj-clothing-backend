@@ -21,6 +21,7 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 const stripe = new Stripe(SECRET_KEY);
 
 app.post("/create-payment-intent", async (req, res) => {
+  console.log("called");
   try {
     const { email, name, currency, amount } = req.body;
     // if (!name) return res.status(400).json({ message: "Please enter a name" });
@@ -35,6 +36,28 @@ app.post("/create-payment-intent", async (req, res) => {
         amount,
       },
     });
+    console.log(paymentIntent.status);
+
+    if (paymentIntent.status === "succeeded") {
+      // Payment was successful
+      console.log("success");
+    } else if (paymentIntent.status === "requires_payment_method") {
+      // Handle payment method error here
+      console.log(paymentIntent.last_payment_error);
+      const error = paymentIntent.last_payment_error;
+      if (error) {
+        if (error.code === "insufficient_funds") {
+          // Handle insufficient funds error
+          console.error("Insufficient Funds Error");
+          // Display an error message to the user
+          // You can use an alert or update your UI to inform the user about the issue
+        } else {
+          // Handle other payment method errors
+          console.error("Payment Method Error:", error.message);
+          // Display a relevant error message to the user
+        }
+      }
+    }
     const clientSecret = paymentIntent.client_secret;
     res.json({
       message: "Payment initiated",
@@ -44,7 +67,8 @@ app.post("/create-payment-intent", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    //@ts-ignore
+    res.status(500).json({ message: `Internal server error : ${err.code}` });
   }
 });
 

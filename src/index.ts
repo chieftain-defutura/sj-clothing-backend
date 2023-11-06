@@ -21,10 +21,17 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 const stripe = new Stripe(SECRET_KEY);
 
 app.post("/create-payment-intent", async (req, res) => {
-  console.log("called");
   try {
-    const { email, name, currency, amount } = req.body;
-    // if (!name) return res.status(400).json({ message: "Please enter a name" });
+    const {
+      email,
+      name,
+      currency,
+      amount,
+      productIds,
+      address,
+      paymentStatus,
+      userid,
+    } = req.body;
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: currency,
@@ -34,6 +41,10 @@ app.post("/create-payment-intent", async (req, res) => {
         name,
         currency,
         amount,
+        productIds,
+        address,
+        paymentStatus,
+        userid,
       },
     });
     console.log(paymentIntent.status);
@@ -62,13 +73,19 @@ app.post("/create-payment-intent", async (req, res) => {
     res.json({
       message: "Payment initiated",
       amount: amount,
+      email: email,
+      name: name,
       currency: currency,
+      productIds: productIds,
+      address: address,
+      paymentStatus: paymentStatus,
+      userid: userid,
       clientSecret,
     });
   } catch (err) {
     console.error(err);
     //@ts-ignore
-    res.status(500).json({ message: `Internal server error : ${err.code}` });
+    res.status(500).json({ message: `Internal server error : ${err}` });
   }
 });
 

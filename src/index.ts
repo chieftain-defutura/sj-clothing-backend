@@ -73,6 +73,7 @@ app.post("/create-payment-intent", async (req, res) => {
 });
 
 app.post("/stripe-payment", async (req, res) => {
+  console.log("called");
   const sig = req.headers["stripe-signature"];
 
   if (typeof sig !== "string") {

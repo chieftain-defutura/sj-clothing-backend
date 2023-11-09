@@ -22,16 +22,7 @@ const stripe = new Stripe(SECRET_KEY);
 
 app.post("/create-payment-intent", async (req, res) => {
   try {
-    const {
-      email,
-      name,
-      currency,
-      amount,
-      productIds,
-      address,
-      paymentStatus,
-      userid,
-    } = req.body;
+    const { email, name, currency, amount } = req.body;
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: currency,
@@ -41,10 +32,6 @@ app.post("/create-payment-intent", async (req, res) => {
         name,
         currency,
         amount,
-        productIds,
-        address,
-        paymentStatus,
-        userid,
       },
     });
     console.log(paymentIntent.status);
@@ -76,10 +63,6 @@ app.post("/create-payment-intent", async (req, res) => {
       email: email,
       name: name,
       currency: currency,
-      productIds: productIds,
-      address: address,
-      paymentStatus: paymentStatus,
-      userid: userid,
       clientSecret,
     });
   } catch (err) {

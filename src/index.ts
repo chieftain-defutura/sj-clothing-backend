@@ -19,41 +19,49 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 
 const stripe = new Stripe(SECRET_KEY);
 
-app.post("/webhooks", express.raw({ type: "application/json" }), async (req, res) => {
-  console.log("called");
-  const sig = req.headers["stripe-signature"];
+app.post(
+  "/webhooks",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    console.log("called");
+    const sig = req.headers["stripe-signature"];
 
-  if (typeof sig !== "string") {
-    res.status(400).json({ message: "Bad Request" });
-    return;
+    if (typeof sig !== "string") {
+      res.status(400).json({ message: "Bad Request" });
+      return;
+    }
+
+    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
+      console.error("Stripe webhook secret is not defined or empty.");
+      res.status(500).json({ message: "Internal server error" });
+      return;
+    }
+
+    let event;
+
+    try {
+      event = await stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        stripeWebhookSecret
+      );
+    } catch (err) {
+      console.error(err);
+      res.status(400).json({ message: "Bad Request" });
+      return;
+    }
+
+    if (event.type === "payment_intent.created") {
+      console.log(`${event.data.object.metadata.name} initated payment!`);
+    }
+    if (event.type === "payment_intent.succeeded") {
+      console.log(`${event.data.object.metadata.name} succeeded payment!`);
+    }
+    res.json({ ok: true });
   }
-
-  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
-    console.error("Stripe webhook secret is not defined or empty.");
-    res.status(500).json({ message: "Internal server error" });
-    return;
-  }
-
-  let event;
-
-  try {
-    event = await stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
-  } catch (err) {
-    console.error(err);
-    res.status(400).json({ message: "Bad Request" });
-    return;
-  }
-
-  if (event.type === "payment_intent.created") {
-    console.log(`${event.data.object.metadata.name} initated payment!`);
-  }
-  if (event.type === "payment_intent.succeeded") {
-    console.log(`${event.data.object.metadata.name} succeeded payment!`);
-  }
-  res.json({ ok: true });
-});
+);
 
 app.use(express.json({}));
 
@@ -63,7 +71,10 @@ app.post("/create-payment-intent", async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: currency,
-      payment_method_types: ["card"],
+      // payment_method_types: ["card"],
+      automatic_payment_methods: {
+        enabled: true,
+      },
       metadata: {
         email,
         name,
@@ -102,6 +113,7 @@ app.post("/create-payment-intent", async (req, res) => {
       name: name,
       currency: currency,
       clientSecret,
+      paymentId: paymentIntent.client_secret,
     });
   } catch (err) {
     console.error(err);

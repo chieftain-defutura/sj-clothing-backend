@@ -25,6 +25,7 @@
     "dotenv": "^16.0.3",
     "ethers": "^5.7.0",
     "express": "^4.18.1",
+    "firebase-admin": "^11.11.0",
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^6.5.2",
     "stripe": "^14.2.0",

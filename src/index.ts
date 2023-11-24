@@ -132,6 +132,7 @@ app.post("/create-payment-intent", async (req, res) => {
       currency: currency,
       clientSecret,
       customer: customer.id,
+      paymentId: paymentIntent.id,
     });
   } catch (err) {
     console.error(err);

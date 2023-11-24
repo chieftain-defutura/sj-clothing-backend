@@ -20,78 +20,86 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 
 const stripe = new Stripe(SECRET_KEY);
 
-app.post(
-  "/webhooks",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    console.log("called");
-    const sig = req.headers["stripe-signature"];
+app.post("/webhooks", express.raw({ type: "application/json" }), async (req, res) => {
+  console.log("called");
+  const sig = req.headers["stripe-signature"];
 
-    if (typeof sig !== "string") {
-      res.status(400).json({ message: "Bad Request" });
-      return;
-    }
-
-    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
-      console.error("Stripe webhook secret is not defined or empty.");
-      res.status(500).json({ message: "Internal server error" });
-      return;
-    }
-
-    let event;
-
-    try {
-      event = await stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        stripeWebhookSecret
-      );
-    } catch (err) {
-      console.error(err);
-      res.status(400).json({ message: "Bad Request" });
-      return;
-    }
-
-    if (event.type === "payment_intent.created") {
-      console.log(`${event.data.object.metadata.name} initated payment!`);
-    }
-    if (event.type === "payment_intent.succeeded") {
-      console.log(event.data);
-      console.log(`${event.data.object.metadata.name} succeeded payment!`);
-      await db
-        .collection("Orders")
-        .doc(event.data.object.id)
-        .update({ paymentStatus: "SUCCESS" });
-      console.log(`updaetd on db`);
-    }
-    res.json({ ok: true });
+  if (typeof sig !== "string") {
+    res.status(400).json({ message: "Bad Request" });
+    return;
   }
-);
+
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
+    console.error("Stripe webhook secret is not defined or empty.");
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+
+  let event;
+
+  try {
+    event = await stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: "Bad Request" });
+    return;
+  }
+
+  if (event.type === "payment_intent.created") {
+    console.log(`${event.data.object.metadata.name} initated payment!`);
+  }
+  if (event.type === "payment_intent.succeeded") {
+    console.log(event.data);
+    console.log(`${event.data.object.metadata.name} succeeded payment!`);
+    try {
+      await db.collection("Orders").doc(event.data.object.id).update({ paymentStatus: "SUCCESS" });
+    } catch (error) {
+      console.log("ERROR ON STROING DB", error);
+    }
+    console.log(`updaetd on db`);
+  }
+  res.json({ ok: true });
+});
 
 app.use(express.json({}));
 
 app.post("/create-payment-intent", async (req, res) => {
   try {
-    const { email, name, currency, amount, address } = req.body;
+    const { email, name, currency, amount, address, description } = req.body;
+
+    const customer = await stripe.customers.create({
+      email,
+      name,
+      address: {
+        line1: address.line1,
+        postal_code: address.postal_code,
+        city: address.city,
+        state: address.state,
+        country: address.country,
+      },
+    });
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
+      amount: Math.round(Number(amount) * 100),
+      currency: currency,
+      customer: customer.id,
+      payment_method_types: ["card"],
       shipping: {
         name: name,
         address: {
           line1: address.line1,
-          line2: address.line2,
           postal_code: address.postal_code,
           city: address.city,
           state: address.state,
           country: address.country,
         },
       },
-      description: "shipping address",
-      currency: currency,
+      description: description || "Software development services",
     });
     console.log(paymentIntent.status);
+
     if (paymentIntent.status === "succeeded") {
       // Payment was successful
       console.log("success");
@@ -113,13 +121,20 @@ app.post("/create-payment-intent", async (req, res) => {
       }
     }
     const clientSecret = paymentIntent.client_secret;
-    console.log(paymentIntent.id);
+
+    console.log("PAYMENT ID -> ", paymentIntent.id);
+
     res.json({
+      message: "Payment initiated",
+      amount: amount,
+      email: email,
+      name: name,
+      currency: currency,
       clientSecret,
-      paymentId: paymentIntent.id,
+      customer: customer.id,
     });
-  } catch (error) {
-    console.log(error);
+  } catch (err) {
+    console.error(err);
     //@ts-ignore
     res.status(500).json({ message: `Internal server error : ${err}` });
   }

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This project implements a payment and notification system using the Express.js framework, Stripe for payment processing, and Twilio for sending SMS notifications. The system allows users to initiate payments, handles payment webhooks, and sends appointment notifications via SMS.
+This project implements a payment and notification system using the Express.js framework, Stripe for payment processing, and Twilio for sending SMS notifications. The system allows users to initiate payments, handles payment webhooks, and sends notifications via SMS.
 
 ## Technologies Used
 

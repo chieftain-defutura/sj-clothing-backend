@@ -3,6 +3,8 @@ import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 import { db } from "./db";
+import { Twilio } from "twilio";
+import axios from "axios";
 
 dotenv.config();
 
@@ -197,6 +199,24 @@ app.post("/create-payment-intent", async (req, res) => {
 //     res.status(500).json({ message: `Internal server error : ${err}` });
 //   }
 // });
+
+app.post("/send-otp", async (req, res) => {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const client = new Twilio(accountSid, authToken);
+
+  try {
+    const message = await client.messages.create({
+      body: "You have an appointment with Owl, Inc. on Friday, November 3 at 4:00 PM. Reply C to confirm.",
+      to: "+917358247659",
+      from: "+18582810964",
+    });
+
+    res.json(message);
+  } catch (error) {
+    res.json(error);
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`server running on PORT ${PORT}`);

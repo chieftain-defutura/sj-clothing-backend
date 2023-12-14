@@ -397,6 +397,85 @@ app.post("/pushToken", async (req, res) => {
   }
 });
 
+app.post("/individualPushNotification", async (req, res) => {
+  try {
+    const currentTime = Date.now();
+    const futureTime = currentTime + 1 * 60 * 1000; // Adding 5 minutes in milliseconds
+
+    const title = req.body.title;
+    const body = req.body.body;
+    const time = req.body.time;
+    const futureDate = new Date(futureTime);
+    const job = schedule.scheduleJob(futureDate, async () => {
+      const dbData = await db.collection("users").get();
+
+      let usersExpoTokens: any[] = [];
+
+      if (!dbData.empty) {
+        dbData.forEach((doc: { data: () => any }) => {
+          const componentData = doc.data();
+          usersExpoTokens.push(componentData);
+        });
+      }
+
+      const mergedarray = usersExpoTokens.map((f) =>
+        f.tokens.map((s) => s.expoAndroidToken)
+      );
+      const flattenedArray = [].concat(...mergedarray);
+
+      const iosmergedarray = usersExpoTokens.map((f) =>
+        f.tokens.map((s) => s.expoIosToken)
+      );
+      const iosflattenedArray = [].concat(...iosmergedarray);
+      const JoinedArray = flattenedArray.concat(iosflattenedArray);
+      const finalExpoTokenArray = JoinedArray.filter((item) => item !== "null");
+
+      // Keep track of sent tokens
+      let sentTokens: Set<string> = new Set();
+
+      let messages: any[] = [];
+      for (let pushToken of finalExpoTokenArray) {
+        if (!Expo.isExpoPushToken(pushToken) || sentTokens.has(pushToken)) {
+          // Skip invalid tokens or already sent tokens
+          continue;
+        }
+
+        // Construct a message
+        messages.push({
+          to: pushToken,
+          sound: "default",
+          title: title,
+          body: body,
+          icon: "https://ibb.co/VMzNQ19",
+          color: "#fffbd7",
+        });
+
+        sentTokens.add(pushToken);
+      }
+
+      if (messages.length > 0) {
+        let chunks = expo.chunkPushNotifications(messages);
+
+        let tickets: any[] = [];
+        for (let chunk of chunks) {
+          try {
+            let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+            console.log(ticketChunk);
+            tickets.push(...ticketChunk);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      }
+
+      res.send("success");
+    });
+  } catch (error) {
+    console.error("Error sending verification code:", error);
+    res.status(500).json(error);
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`server running on PORT ${PORT}`);
 });

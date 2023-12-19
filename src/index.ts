@@ -322,7 +322,7 @@ app.post("/pushToken", async (req, res) => {
 
     const title = req.body.title;
     const body = req.body.body;
-    const time = req.body.time;
+    // const time = req.body.time;
     const futureDate = new Date(futureTime);
     const job = schedule.scheduleJob(futureDate, async () => {
       const dbData = await db.collection("users").get();
@@ -335,18 +335,23 @@ app.post("/pushToken", async (req, res) => {
           usersExpoTokens.push(componentData);
         });
       }
-
-      const mergedarray = usersExpoTokens.map((f) =>
-        f.tokens.map((s) => s.expoAndroidToken)
+      console.log(
+        "userTokens",
+        usersExpoTokens.filter((d) => d.tokens[0] !== null)
       );
+      const mergedarray = usersExpoTokens
+        .filter((s) => s.tokens[0] !== null)
+        .map((f) => f.tokens.map((s) => s.expoAndroidToken));
       const flattenedArray = [].concat(...mergedarray);
 
-      const iosmergedarray = usersExpoTokens.map((f) =>
-        f.tokens.map((s) => s.expoIosToken)
-      );
+      const iosmergedarray = usersExpoTokens
+        .filter((s) => s.tokens[0] !== null)
+        .map((f) => f.tokens.map((s) => s.expoIosToken));
       const iosflattenedArray = [].concat(...iosmergedarray);
       const JoinedArray = flattenedArray.concat(iosflattenedArray);
-      const finalExpoTokenArray = JoinedArray.filter((item) => item !== "null");
+      const finalExpoTokenArray = JoinedArray.filter((item) => item !== null);
+
+      console.log("finalexpo", finalExpoTokenArray);
 
       // Keep track of sent tokens
       let sentTokens: Set<string> = new Set();

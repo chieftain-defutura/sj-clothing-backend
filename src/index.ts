@@ -26,59 +26,57 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 
 const stripe = new Stripe(SECRET_KEY);
 
-app.post(
-  "/webhooks",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    console.log("called");
-    const sig = req.headers["stripe-signature"];
+app.post("/webhooks", express.raw({ type: "application/json" }), async (req, res) => {
+  console.log("called");
+  const sig = req.headers["stripe-signature"];
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    if (typeof sig !== "string") {
-      res.status(400).json({ message: "Bad Request" });
-      return;
-    }
+  console.log("req.body:", req.body);
+  console.log("sig:", sig);
+  console.log("stripeWebhookSecret:", stripeWebhookSecret);
 
-    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
-      console.error("Stripe webhook secret is not defined or empty.");
-      res.status(500).json({ message: "Internal server error" });
-      return;
-    }
-
-    let event;
-
-    try {
-      event = await stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        stripeWebhookSecret
-      );
-    } catch (err) {
-      console.error(err);
-      res.status(400).json({ message: "Bad Request" });
-      return;
-    }
-
-    if (event.type === "payment_intent.created") {
-      console.log(`${event.data.object.metadata.name} initated payment!`);
-    }
-    if (event.type === "payment_intent.succeeded") {
-      console.log(event.data);
-      console.log(`${event.data.object.metadata.name} succeeded payment!`);
-      try {
-        await db
-          .collection("Orders")
-          .doc(event.data.object.id)
-          .update({ paymentStatus: "SUCCESS" });
-      } catch (error) {
-        console.log("ERROR ON STROING DB", error);
-      }
-      console.log(`updaetd on db`);
-    }
-    res.json({ ok: true });
+  if (typeof sig !== "string") {
+    res.status(400).json({ message: "Bad Request" });
+    return;
   }
-);
+
+  if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
+    console.error("Stripe webhook secret is not defined or empty.");
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+
+  let event;
+  let payload;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
+  } catch (err: any) {
+    payload = JSON.parse(err.payload);
+
+    console.error(err);
+    // res.status(400).json({ message: "Bad Request" });
+    // return;
+  }
+
+  if (payload.type === "payment_intent.created") {
+    console.log(`${payload.data.object.metadata.name} initated payment!`);
+  }
+  if (payload.type === "payment_intent.succeeded") {
+    console.log(payload.data);
+    console.log(`${payload.data.object.metadata.name} succeeded payment!`);
+    try {
+      await db
+        .collection("Orders")
+        .doc(payload.data.object.id)
+        .update({ paymentStatus: "SUCCESS" });
+    } catch (error) {
+      console.log("ERROR ON STROING DB", error);
+    }
+    console.log(`updaetd on db`);
+  }
+  res.json({ ok: true });
+});
 
 app.use(express.json({}));
 
@@ -371,8 +369,7 @@ app.post("/pushToken", async (req, res) => {
           body: body,
           icon: "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
           color: "#fffbd7",
-          image:
-            "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
+          image: "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
           url: "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
         });
 

@@ -6,5 +6,6 @@ firebaseAdmin.initializeApp({
 });
 
 const db = firebaseAdmin.firestore();
+const message = firebaseAdmin.messaging();
 
-export { db };
+export { db, message };

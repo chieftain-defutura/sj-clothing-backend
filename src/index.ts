@@ -2,10 +2,12 @@ import cors from "cors";
 import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
-import { db } from "./db";
+import { db, message } from "./db";
 import { Twilio } from "twilio";
 import { Expo } from "expo-server-sdk";
 import schedule from "node-schedule";
+import apn from "apn";
+import path from "path";
 
 dotenv.config();
 
@@ -85,6 +87,12 @@ app.use(express.json({}));
 app.post("/create-payment-intent", async (req, res) => {
   try {
     const { email, name, currency, amount, address, description } = req.body;
+    console.log("email", email);
+    console.log("name", name);
+    console.log("currency", currency);
+    console.log("amount", amount);
+    console.log("address", address);
+    console.log("description", description);
 
     const customer = await stripe.customers.create({
       email,
@@ -155,6 +163,14 @@ app.post("/create-payment-intent", async (req, res) => {
     console.error(err);
     //@ts-ignore
     res.status(500).json({ message: `Internal server error : ${err}` });
+  }
+});
+
+app.post("/test", async (req, res) => {
+  try {
+    console.log("test");
+  } catch (error) {
+    console.log(error);
   }
 });
 
@@ -318,84 +334,98 @@ app.post("/send-otp", async (req, res) => {
 app.post("/pushToken", async (req, res) => {
   try {
     const currentTime = Date.now();
-    const futureTime = currentTime + 1 * 60 * 1000; // Adding 5 minutes in milliseconds
+    const futureTime = currentTime; // Adding 5 minutes in milliseconds
 
     const title = req.body.title;
     const body = req.body.body;
     // const time = req.body.time;
     const futureDate = new Date(futureTime);
-    const job = schedule.scheduleJob(futureDate, async () => {
-      const dbData = await db.collection("users").get();
+    // const job = schedule.scheduleJob(futureDate, async () => {
+    const dbData = await db.collection("users").get();
 
-      let usersExpoTokens: any[] = [];
+    let usersExpoTokens: any[] = [];
 
-      if (!dbData.empty) {
-        dbData.forEach((doc: { data: () => any }) => {
-          const componentData = doc.data();
-          usersExpoTokens.push(componentData);
+    if (!dbData.empty) {
+      dbData.forEach((doc: { data: () => any }) => {
+        const componentData = doc.data();
+        usersExpoTokens.push(componentData);
+      });
+    }
+
+    const mergedarray = usersExpoTokens
+      .filter((s) => s.tokens[0] !== null)
+      .map((f) => f.tokens.map((s) => s.fcmToken));
+    const flattenedArray = [].concat(...mergedarray);
+
+    const iosmergedarray = usersExpoTokens
+      .filter((s) => s.tokens[0] !== null)
+      .map((f) => f.tokens.map((s) => s.apnToken));
+    const iosflattenedArray = [].concat(...iosmergedarray);
+    // const JoinedArray = flattenedArray.concat(iosflattenedArray);
+    // const finalExpoTokenArray = JoinedArray.filter((item) => item !== null);
+
+    // for (let pushToken of flattenedArray) {
+    //   // Your FCM API key
+    //   const messages = {
+    //     data: {
+    //       key1: "value1",
+    //       key2: "value2",
+    //     },
+    //     notification: {
+    //       title: "Notification Title",
+    //       body: "Notification Body",
+    //     },
+    //     token: pushToken,
+    //   };
+
+    //   await message
+    //     .send(messages)
+    //     .then((response) => {
+    //       console.log("Successfully sent message:", response);
+    //     })
+    //     .catch((error) => {
+    //       console.error("Error sending message:", error);
+    //     });
+    // }
+    for (let apnPushToken of [
+      "eadc9d5083ce3c99a1817f6fde00d9b75cf899f28322bf4482425eb350d5f690",
+    ]) {
+      console.log(path.join(__dirname, "./apnkey.p8"));
+      const apnKey = path.join(__dirname, "./apnkey.p8");
+
+      const options = {
+        token: {
+          key: apnKey,
+          keyId: "9JCRBNCXX9",
+          teamId: "B6R5MG79VB",
+        },
+        production: false, // Set to true for production environment
+      };
+
+      const apnProvider = new apn.Provider(options);
+
+      const notification = new apn.Notification();
+      notification.expiry = Math.floor(Date.now() / 1000) + 3600; // Expires 1 hour from now.
+      notification.badge = 3; // Set the badge count
+      notification.sound = "ping.aiff";
+      notification.alert = "Hello, World!";
+      notification.topic = "com.dewallstreet.sprinkle";
+      // Attach custom payload if needed
+      notification.payload = { customKey: "customValue" };
+
+      // Send the notification
+      apnProvider
+        .send(notification, apnPushToken)
+        .then((response) => {
+          console.log("Notification sent:", response.failed[0].response);
+          console.log(response);
+        })
+        .catch((error) => {
+          console.error("Error sending notification:", error);
         });
-      }
-      console.log(
-        "userTokens",
-        usersExpoTokens.filter((d) => d.tokens[0] !== null)
-      );
-      const mergedarray = usersExpoTokens
-        .filter((s) => s.tokens[0] !== null)
-        .map((f) => f.tokens.map((s) => s.expoAndroidToken));
-      const flattenedArray = [].concat(...mergedarray);
-
-      const iosmergedarray = usersExpoTokens
-        .filter((s) => s.tokens[0] !== null)
-        .map((f) => f.tokens.map((s) => s.expoIosToken));
-      const iosflattenedArray = [].concat(...iosmergedarray);
-      const JoinedArray = flattenedArray.concat(iosflattenedArray);
-      const finalExpoTokenArray = JoinedArray.filter((item) => item !== null);
-
-      console.log("finalexpo", finalExpoTokenArray);
-
-      // Keep track of sent tokens
-      let sentTokens: Set<string> = new Set();
-
-      let messages: any[] = [];
-      for (let pushToken of finalExpoTokenArray) {
-        if (!Expo.isExpoPushToken(pushToken) || sentTokens.has(pushToken)) {
-          // Skip invalid tokens or already sent tokens
-          continue;
-        }
-
-        // Construct a message
-        messages.push({
-          to: pushToken,
-          sound: "default",
-          title: title,
-          body: body,
-          icon: "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
-          color: "#fffbd7",
-          image:
-            "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
-          url: "https://w.forfun.com/fetch/b4/b4d430320229744245679e19e50b6f03.jpeg?w=300",
-        });
-
-        sentTokens.add(pushToken);
-      }
-
-      if (messages.length > 0) {
-        let chunks = expo.chunkPushNotifications(messages);
-
-        let tickets: any[] = [];
-        for (let chunk of chunks) {
-          try {
-            let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-            console.log(ticketChunk);
-            tickets.push(...ticketChunk);
-          } catch (error) {
-            console.error(error);
-          }
-        }
-      }
-
-      res.send("success");
-    });
+    }
+    res.send("success");
+    // });
   } catch (error) {
     console.error("Error sending verification code:", error);
     res.status(500).json(error);

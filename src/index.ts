@@ -34,13 +34,16 @@ app.post(
   async (req, res) => {
     console.log("called");
     const sig = req.headers["stripe-signature"];
+    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    console.log("req.body:", req.body);
+    console.log("sig:", sig);
+    console.log("stripeWebhookSecret:", stripeWebhookSecret);
 
     if (typeof sig !== "string") {
       res.status(400).json({ message: "Bad Request" });
       return;
     }
-
-    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
       console.error("Stripe webhook secret is not defined or empty.");
@@ -49,29 +52,32 @@ app.post(
     }
 
     let event;
+    let payload;
 
     try {
-      event = await stripe.webhooks.constructEvent(
+      event = stripe.webhooks.constructEvent(
         req.body,
         sig,
         stripeWebhookSecret
       );
-    } catch (err) {
+    } catch (err: any) {
+      payload = JSON.parse(err.payload);
+
       console.error(err);
-      res.status(400).json({ message: "Bad Request" });
-      return;
+      // res.status(400).json({ message: "Bad Request" });
+      // return;
     }
 
-    if (event.type === "payment_intent.created") {
-      console.log(`${event.data.object.metadata.name} initated payment!`);
+    if (payload.type === "payment_intent.created") {
+      console.log(`${payload.data.object.metadata.name} initated payment!`);
     }
-    if (event.type === "payment_intent.succeeded") {
-      console.log(event.data);
-      console.log(`${event.data.object.metadata.name} succeeded payment!`);
+    if (payload.type === "payment_intent.succeeded") {
+      console.log(payload.data);
+      console.log(`${payload.data.object.metadata.name} succeeded payment!`);
       try {
         await db
           .collection("Orders")
-          .doc(event.data.object.id)
+          .doc(payload.data.object.id)
           .update({ paymentStatus: "SUCCESS" });
       } catch (error) {
         console.log("ERROR ON STROING DB", error);

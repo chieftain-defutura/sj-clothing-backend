@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 import { db, message } from "./db";
 import { Twilio } from "twilio";
 import { Expo } from "expo-server-sdk";
-import schedule from "node-schedule";
 import apn from "apn";
 import path from "path";
 

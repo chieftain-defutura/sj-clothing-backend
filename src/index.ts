@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
-import { db, message } from "./db";
+import { db } from "./db";
 import { Twilio } from "twilio";
 import { Expo } from "expo-server-sdk";
 import apn from "apn";
@@ -27,57 +27,65 @@ const SECRET_KEY = process.env.STRIPE_SECRET_KEY || "default_secret_key";
 
 const stripe = new Stripe(SECRET_KEY);
 
-app.post("/webhooks", express.raw({ type: "application/json" }), async (req, res) => {
-  console.log("called");
-  const sig = req.headers["stripe-signature"];
-  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+app.post(
+  "/webhooks",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    console.log("called");
+    const sig = req.headers["stripe-signature"];
+    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  console.log("req.body:", req.body);
-  console.log("sig:", sig);
-  console.log("stripeWebhookSecret:", stripeWebhookSecret);
+    console.log("req.body:", req.body);
+    console.log("sig:", sig);
+    console.log("stripeWebhookSecret:", stripeWebhookSecret);
 
-  if (typeof sig !== "string") {
-    res.status(400).json({ message: "Bad Request" });
-    return;
-  }
-
-  if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
-    console.error("Stripe webhook secret is not defined or empty.");
-    res.status(500).json({ message: "Internal server error" });
-    return;
-  }
-
-  let event;
-  let payload;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
-  } catch (err: any) {
-    payload = JSON.parse(err.payload);
-
-    console.error(err);
-    // res.status(400).json({ message: "Bad Request" });
-    // return;
-  }
-
-  if (payload.type === "payment_intent.created") {
-    console.log(`${payload.data.object.metadata.name} initated payment!`);
-  }
-  if (payload.type === "payment_intent.succeeded") {
-    console.log(payload.data);
-    console.log(`${payload.data.object.metadata.name} succeeded payment!`);
-    try {
-      await db
-        .collection("Orders")
-        .doc(payload.data.object.id)
-        .update({ paymentStatus: "SUCCESS" });
-    } catch (error) {
-      console.log("ERROR ON STROING DB", error);
+    if (typeof sig !== "string") {
+      res.status(400).json({ message: "Bad Request" });
+      return;
     }
-    console.log(`updaetd on db`);
+
+    if (typeof stripeWebhookSecret !== "string" || stripeWebhookSecret === "") {
+      console.error("Stripe webhook secret is not defined or empty.");
+      res.status(500).json({ message: "Internal server error" });
+      return;
+    }
+
+    let event;
+    let payload;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        stripeWebhookSecret
+      );
+    } catch (err: any) {
+      payload = JSON.parse(err.payload);
+
+      console.error(err);
+      // res.status(400).json({ message: "Bad Request" });
+      // return;
+    }
+
+    if (payload.type === "payment_intent.created") {
+      console.log(`${payload.data.object.metadata.name} initated payment!`);
+    }
+    if (payload.type === "payment_intent.succeeded") {
+      console.log(payload.data);
+      console.log(`${payload.data.object.metadata.name} succeeded payment!`);
+      try {
+        await db
+          .collection("Orders")
+          .doc(payload.data.object.id)
+          .update({ paymentStatus: "SUCCESS" });
+      } catch (error) {
+        console.log("ERROR ON STROING DB", error);
+      }
+      console.log(`updaetd on db`);
+    }
+    res.json({ ok: true });
   }
-  res.json({ ok: true });
-});
+);
 
 app.use(express.json({}));
 
@@ -175,7 +183,8 @@ app.post("/send-otp", async (req, res) => {
   const phoneNumber = req.body.phoneNumber;
   const otp = req.body.otp;
 
-  if (!phoneNumber || !otp) return res.status(403).json({ error: { message: "invalid values" } });
+  if (!phoneNumber || !otp)
+    return res.status(403).json({ error: { message: "invalid values" } });
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -193,88 +202,6 @@ app.post("/send-otp", async (req, res) => {
     res.json(error);
   }
 });
-
-// app.post("/pushToken", async (req, res) => {
-//   try {
-//     const currentTime = Date.now();
-//     const futureTime = currentTime + 1 * 60 * 1000; // Adding 5 minutes in milliseconds
-
-//     const title = req.body.title;
-//     const body = req.body.body;
-//     const time = req.body.time;
-//     const futureDate = new Date(futureTime);
-//     const job = schedule.scheduleJob(futureDate, async () => {
-//       const dbData = await db.collection("users").get();
-
-//       let usersExpoTokens: any[] = [];
-//       // console.log("dtaa", dbData);
-
-//       if (!dbData.empty) {
-//         console.log("1");
-//         dbData.forEach((doc: { data: () => any }) => {
-//           const componentData = doc.data();
-//           usersExpoTokens.push(componentData);
-//         });
-//       }
-
-//       const mergedarray = usersExpoTokens.map((f) =>
-//         f.tokens.map((s) => s.expoAndroidToken)
-//       );
-//       console.log("mergedarray", mergedarray);
-//       const flattenedArray = [].concat(...mergedarray);
-
-//       const iosmergedarray = usersExpoTokens.map((f) =>
-//         f.tokens.map((s) => s.expoIosToken)
-//       );
-//       const iosflattenedArray = [].concat(...iosmergedarray);
-//       const JoinedArray = flattenedArray.concat(iosflattenedArray);
-//       const finalExpoTokenArray = JoinedArray.filter((item) => item !== "null");
-//       console.log(finalExpoTokenArray);
-
-//       let messages: any[] = [];
-//       for (let pushToken of finalExpoTokenArray) {
-//         if (!Expo.isExpoPushToken(pushToken)) {
-//           console.error(
-//             `Push token ${pushToken} is not a valid Expo push token`
-//           );
-//           continue;
-//         }
-
-//         // Construct a message (see https://docs.expo.io/push-notifications/sending-notifications/)
-//         messages.push({
-//           to: pushToken,
-//           sound: "default",
-//           title: title,
-//           body: body,
-//           icon: "./icon.png",
-//           color: "#fffbd7",
-//           image:
-//             "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTJaB-iAUDrgCG3MDdG1snChr7NQ7IZYBy23w&usqp=CAU",
-//           url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTJaB-iAUDrgCG3MDdG1snChr7NQ7IZYBy23w&usqp=CAU",
-//         });
-//         let chunks = expo.chunkPushNotifications(messages);
-
-//         // expo.sendPushNotificationsAsync(chunks[0]);
-//         let tickets: any[] = [];
-//         (async () => {
-//           for (let chunk of chunks) {
-//             try {
-//               let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-//               console.log(ticketChunk);
-//               tickets.push(...ticketChunk);
-//             } catch (error) {
-//               console.error(error);
-//             }
-//           }
-//           res.send("success");
-//         })();
-//       }
-//     });
-//   } catch (error) {
-//     console.error("Error sending verification code:", error);
-//     res.status(500).json(error);
-//   }
-// });
 
 app.post("/pushToken", async (req, res) => {
   try {
@@ -332,7 +259,9 @@ app.post("/pushToken", async (req, res) => {
     //       console.error("Error sending message:", error);
     //     });
     // }
-    for (let apnPushToken of ["eadc9d5083ce3c99a1817f6fde00d9b75cf899f28322bf4482425eb350d5f690"]) {
+    for (let apnPushToken of [
+      "eadc9d5083ce3c99a1817f6fde00d9b75cf899f28322bf4482425eb350d5f690",
+    ]) {
       console.log(path.join(__dirname, "./apnkey.p8"));
       const apnKey = path.join(__dirname, "./apnkey.p8");
 

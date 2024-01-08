@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "apn": "^2.2.0",
+    "canvas": "^2.11.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "expo-server-sdk": "^3.7.0",
